@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pharma Battle</title><style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Tahoma,sans-serif;background:#f4f7fb;color:#172033}
+.wrap{max-width:720px;margin:auto;padding:18px}.card{background:white;border-radius:20px;padding:22px;margin:14px 0;box-shadow:0 6px 25px #0001}
+h1{margin:4px 0 8px}.muted{color:#687386}.row{display:flex;gap:10px;flex-wrap:wrap}
+input,button{width:100%;padding:14px;border-radius:12px;border:1px solid #d7deea;font-size:16px}button{background:#172033;color:white;border:0;font-weight:bold;cursor:pointer}.secondary{background:#e9eef7;color:#172033}.hidden{display:none}
+.code{font-size:38px;font-weight:900;letter-spacing:5px;text-align:center;margin:15px}.q{font-size:21px;font-weight:bold;line-height:1.6}.opt{text-align:right;background:#f5f7fb;color:#172033;margin:8px 0}.opt:disabled{opacity:.7}.meta{display:flex;justify-content:space-between;margin:12px 0;font-weight:bold}.timer{font-size:30px;text-align:center;font-weight:900}.correct{outline:3px solid #22a06b}.wrong{outline:3px solid #d64545}.rank{display:flex;justify-content:space-between;padding:12px;border-bottom:1px solid #eee}.rank:first-child{font-size:20px;font-weight:bold}
+</style></head><body><div class="wrap">
+<div id="home" class="card"><h1>💊 Pharma Battle</h1><p class="muted">صيدلي تحت الاختبار — 10 أسئلة في الجولة</p>
+<input id="name" placeholder="اسمك"><div class="row"><button onclick="create()">إنشاء غرفة</button><button class="secondary" onclick="join()">دخول بكود</button></div>
+<input id="code" class="hidden" placeholder="كود الغرفة المكوّن من 6 أرقام" style="margin-top:10px"></div>
+<div id="lobby" class="card hidden"><h2>الغرفة</h2><div id="roomcode" class="code"></div><p>ابعت الكود لأصحابك. لما الكل يدخل اضغط ابدأ.</p><div id="players"></div><button onclick="start()">ابدأ اللعبة</button></div>
+<div id="game" class="card hidden"><div class="meta"><span id="progress"></span><span id="difficulty"></span></div><div id="timer" class="timer">10</div><div id="question" class="q"></div><div id="options"></div><div id="status" class="muted"></div></div>
+<div id="finish" class="card hidden"><h2>🏆 النتيجة النهائية</h2><div id="leaderboard"></div><button onclick="location.reload()">لعبة جديدة</button></div>
+</div><script>
+let ws, myId, isHost=false;
+const $=id=>document.getElementById(id);
+function connect(){ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host);ws.onmessage=e=>handle(JSON.parse(e.data))}
+connect();
+function send(x){ws.send(JSON.stringify(x))}
+function name(){return $("name").value.trim()||"اللاعب"}
+function create(){send({type:"create",name:name()})}
+function join(){ $("code").classList.remove("hidden"); if(!$("code").value.trim()) return; send({type:"join",name:name(),code:$("code").value.trim()})}
+$("code").addEventListener("keydown",e=>{if(e.key==="Enter")join()});
+function start(){send({type:"start"})}
+function show(id){["home","lobby","game","finish"].forEach(x=>$(x).classList.toggle("hidden",x!==id))}
+function renderLobby(room){show("lobby");$("roomcode").textContent=room.code;$("players").innerHTML=room.players.map(p=>`<div class="rank"><span>${p.name}${p.id===room.host?" 👑":""}</span><span>${p.score}</span></div>`).join("")}
+function handle(m){
+ if(m.type==="created"){myId=m.id;isHost=true;renderLobby(m.room)}
+ if(m.type==="lobby"){renderLobby(m.room)}
+ if(m.type==="error")alert(m.message);
+ if(m.type==="question"){show("game");$("progress").textContent=`السؤال ${m.index+1}/${m.total}`;$("difficulty").textContent=`${m.difficulty==="easy"?"سهل":m.difficulty==="medium"?"متوسط":"صعب"} • ${m.points} نقطة`;$("question").textContent=m.text;$("status").textContent="اختار إجابة واحدة";let box=$("options");box.innerHTML="";m.options.forEach((o,i)=>{let b=document.createElement("button");b.className="opt";b.textContent=`${String.fromCharCode(65+i)}- ${o}`;b.onclick=()=>{send({type:"answer",answer:i});[...box.children].forEach(x=>x.disabled=true);$("status").textContent="تم تسجيل إجابتك";};box.appendChild(b)});timer(m.endsAt)}
+ if(m.type==="reveal"){let buttons=[...$("options").children];buttons.forEach((b,i)=>{b.disabled=true;if(i===m.correct)b.classList.add("correct")});$("status").textContent=`الإجابة الصحيحة: ${String.fromCharCode(65+m.correct)}`;}
+ if(m.type==="finished"){show("finish");$("leaderboard").innerHTML=m.leaderboard.map((p,i)=>`<div class="rank"><span>${i+1}. ${p.name}</span><b>${p.score}</b></div>`).join("")}
+}
+function timer(end){clearInterval(window.t);function f(){let s=Math.max(0,Math.ceil((end-Date.now())/1000));$("timer").textContent=s;if(!s)clearInterval(window.t)}f();window.t=setInterval(f,100)}
+</script></body></html>
